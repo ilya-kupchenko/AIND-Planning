@@ -3,6 +3,35 @@ from aimacode.search import Problem
 from aimacode.utils import expr
 from lp_utils import decode_state
 
+class _CaptureEq:
+    'Object wrapper that remembers "other" for successful equality tests.'
+    def __init__(self, obj):
+        self.obj = obj
+        self.match = obj
+    def __eq__(self, other):
+        result = (self.obj == other)
+        if result:
+            self.match = other
+        return result
+    def __getattr__(self, name):  # support hash() or anything else needed by __contains__
+        return getattr(self.obj, name)
+
+def get_equivalent(container, item, default=None):
+    '''Gets the specific container element matched by: "item in container".
+
+    Useful for retreiving a canonical value equivalent to "item".  For example, a
+    caching or interning application may require fetching a single representative
+    instance from many possible equivalent instances).
+
+    >>> get_equivalent(set([1, 2, 3]), 2.0)             # 2.0 is equivalent to 2
+    2
+    >>> get_equivalent([1, 2, 3], 4, default=0)
+    0
+    '''
+    t = _CaptureEq(item)
+    if t in container:
+        return t.match
+    return default
 
 class PgNode():
     """Base class for planning graph nodes.
@@ -304,14 +333,30 @@ class PlanningGraph():
             adds A nodes to the current level in self.a_levels[level]
         """
         # TODO add action A level to the planning graph as described in the Russell-Norvig text
-        # 1. determine what actions to add and create those PgNode_a objects
-        # 2. connect the nodes to the previous S literal level
         # for example, the A0 level will iterate through all possible actions for the problem and add a PgNode_a to a_levels[0]
         #   set iff all prerequisite literals for the action hold in S0.  This can be accomplished by testing
         #   to see if a proposed PgNode_a has prenodes that are a subset of the previous S level.  Once an
         #   action node is added, it MUST be connected to the S node instances in the appropriate s_level set.
-
-
+        self.a_levels.append(set())
+        # 1. determine what actions to add and create those PgNode_a objects
+        for action in self.all_actions:
+            new_pgnode_a = PgNode_a(action)
+            # print("Checking the action:")
+            # new_pgnode_a.show()
+            if new_pgnode_a.prenodes <= self.s_levels[level]:
+                # print("ACCEPTED ACTION {}".format(new_pgnode_a.action))
+                self.a_levels[level].add(new_pgnode_a)
+                # 2. connect the nodes to the previous S literal level
+                # by adding references to s-level nodes
+                # in parents and prenodes sets
+                # and adding the action to the children set of the s-node
+                s_prenodes = set()
+                for pgnode_s in self.s_levels[level]:
+                    if pgnode_s in new_pgnode_a.prenodes:
+                        s_prenodes.add(pgnode_s)
+                        pgnode_s.children.add(new_pgnode_a)
+                new_pgnode_a.prenodes = s_prenodes
+                new_pgnode_a.parents = s_prenodes
 
 
 
@@ -332,7 +377,19 @@ class PlanningGraph():
         #   may be "added" to the set without fear of duplication.  However, it is important to then correctly create and connect
         #   all of the new S nodes as children of all the A nodes that could produce them, and likewise add the A nodes to the
         #   parent sets of the S nodes
+        self.s_levels.append(set())
+        # 1. determine what literals to add
+        for action in self.a_levels[level - 1]:
+            self.s_levels[level] = self.s_levels[level] | action.effnodes
+        # 2. connect the nodes
+        for action in self.a_levels[level - 1]:
+            new_effnodes = set()
+            for effnode in action.effnodes:
+                    pgnode_s = get_equivalent(self.s_levels[level], effnode)
+                    pgnode_s.parents.add(action)
+                    new_effnodes.add(pgnode_s)
 
+            action.effnodes = new_effnodes
 
 
 
@@ -497,7 +554,7 @@ class PlanningGraph():
 
 
 
-        
+
         return False
 
     def h_levelsum(self) -> int:

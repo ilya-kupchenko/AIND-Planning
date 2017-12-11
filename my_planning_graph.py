@@ -462,13 +462,12 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for Inconsistent Effects between nodes
-        result = False
         for pgnode_s1 in node_a1.effnodes:
             for pgnode_s2 in node_a2.effnodes:
                 if pgnode_s1.symbol == pgnode_s2.symbol and \
-                pgnode_s1.is_pos != pgnode_s2.is_pos:
-                    result = True
-        return result
+                    pgnode_s1.is_pos != pgnode_s2.is_pos:
+                    return True
+        return False
 
     def interference_mutex(self, node_a1: PgNode_a, node_a2: PgNode_a) -> bool:
         """
@@ -485,10 +484,16 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for Interference between nodes
-
-
-
-
+        for pgnode_s1 in node_a1.prenodes:
+            for pgnode_s2 in node_a2.effnodes:
+                if pgnode_s1.symbol == pgnode_s2.symbol and \
+                    pgnode_s1.is_pos != pgnode_s2.is_pos:
+                    return True
+        for pgnode_s1 in node_a1.effnodes:
+            for pgnode_s2 in node_a2.prenodes:
+                if pgnode_s1.symbol == pgnode_s2.symbol and \
+                    pgnode_s1.is_pos != pgnode_s2.is_pos:
+                    return True
         return False
 
     def competing_needs_mutex(self, node_a1: PgNode_a, node_a2: PgNode_a) -> bool:
@@ -502,10 +507,10 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for Competing Needs between nodes
-
-
-
-
+        for pgnode_s1 in node_a1.parents:
+            for pgnode_s2 in node_a2.parents:
+                if pgnode_s1.is_mutex(pgnode_s2):
+                    return True
         return False
 
     def update_s_mutex(self, nodeset: set):
@@ -541,11 +546,7 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for negation between nodes
-
-
-
-
-        return False
+        return node_s1.symbol == node_s2.symbol and node_s1.is_pos != node_s2.is_pos
 
     def inconsistent_support_mutex(self, node_s1: PgNode_s, node_s2: PgNode_s):
         """
@@ -564,11 +565,15 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for Inconsistent Support between nodes
+        for pgnode_a in node_s1.parents:
+            if pgnode_a in node_s2.parents:
+                return False
 
-
-
-
-        return False
+        for pgnode_a1 in node_s1.parents:
+            for pgnode_a2 in node_s2.parents:
+                if not pgnode_a1.is_mutex(pgnode_a2):
+                    return False
+        return True
 
     def h_levelsum(self) -> int:
         """The sum of the level costs of the individual goals (admissible if goals independent)
@@ -578,8 +583,4 @@ class PlanningGraph():
         level_sum = 0
         # TODO implement
         # for each goal in the problem, determine the level cost, then add them together
-
-
-
-
         return level_sum

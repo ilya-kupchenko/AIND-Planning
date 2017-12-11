@@ -8,11 +8,18 @@ class _CaptureEq:
     def __init__(self, obj):
         self.obj = obj
         self.match = obj
+        self.__hash = None
     def __eq__(self, other):
         result = (self.obj == other)
         if result:
+            print("***Matched!")
             self.match = other
+        else:
+            print("Not matched!")
         return result
+    def __hash__(self):
+        self.__hash = self.__hash or hash(self.obj.symbol) ^ hash(self.obj.is_pos)
+        return self.__hash
     def __getattr__(self, name):  # support hash() or anything else needed by __contains__
         return getattr(self.obj, name)
 
@@ -321,6 +328,7 @@ class PlanningGraph():
             self.update_s_mutex(self.s_levels[level])
 
             if self.s_levels[level] == self.s_levels[level - 1]:
+                print("*LEVELED at level {}".format(level))
                 leveled = True
 
     def add_action_level(self, level):
@@ -357,6 +365,7 @@ class PlanningGraph():
                         pgnode_s.children.add(new_pgnode_a)
                 new_pgnode_a.prenodes = s_prenodes
                 new_pgnode_a.parents = s_prenodes
+        print("Done with level {} ACTIONS".format(level))
 
 
 
@@ -379,17 +388,19 @@ class PlanningGraph():
         #   parent sets of the S nodes
         self.s_levels.append(set())
         # 1. determine what literals to add
-        for action in self.a_levels[level - 1]:
-            self.s_levels[level] = self.s_levels[level] | action.effnodes
+        for pgnode_a in self.a_levels[level - 1]:
+            self.s_levels[level] = self.s_levels[level].union(pgnode_a.effnodes)
         # 2. connect the nodes
-        for action in self.a_levels[level - 1]:
+        for pgnode_a in self.a_levels[level - 1]:
             new_effnodes = set()
-            for effnode in action.effnodes:
-                    pgnode_s = get_equivalent(self.s_levels[level], effnode)
-                    pgnode_s.parents.add(action)
-                    new_effnodes.add(pgnode_s)
-
-            action.effnodes = new_effnodes
+            for effnode in pgnode_a.effnodes:
+                for pgnode_s in self.s_levels[level]:
+                    if effnode == pgnode_s:
+                        pgnode_s.parents.add(pgnode_a)
+                        new_effnodes.add(pgnode_s)
+            pgnode_a.effnodes = new_effnodes
+            pgnode_a.children = new_effnodes
+        print("Done with level {} STATES".format(level))
 
 
 
@@ -451,11 +462,13 @@ class PlanningGraph():
         :return: bool
         """
         # TODO test for Inconsistent Effects between nodes
-
-
-
-
-        return False
+        result = False
+        for pgnode_s1 in node_a1.effnodes:
+            for pgnode_s2 in node_a2.effnodes:
+                if pgnode_s1.symbol == pgnode_s2.symbol and \
+                pgnode_s1.is_pos != pgnode_s2.is_pos:
+                    result = True
+        return result
 
     def interference_mutex(self, node_a1: PgNode_a, node_a2: PgNode_a) -> bool:
         """
